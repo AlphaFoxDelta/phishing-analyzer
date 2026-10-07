@@ -1,0 +1,48 @@
+From: "PayPal Support" <support@paypa1-secure.com>
+Reply-To: refunds@paypa1-secure.net
+Return-Path: <bounce@mailer01.example-ru.com>
+To: victim@example.com
+Subject: Urgent: Verify your account now
+Date: Tue, 6 Oct 2026 09:14:22 -0500
+Message-ID: <20261006-paypal-alert-8812@mailer01.example-ru.com>
+Authentication-Results: mx.example.com; spf=fail smtp.mailfrom=paypa1-secure.com; dkim=none; dmarc=fail
+Received: from mailer01.example-ru.com (mailer01.example-ru.com [203.0.113.77]) by mx.example.com with ESMTP id abc123 for <victim@example.com>; Tue, 06 Oct 2026 09:15:01 -0500
+Received: from [198.51.100.23] by mailer01.example-ru.com with SMTP id xyz789; Tue, 06 Oct 2026 09:14:30 -0500
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUNDARY42"
+
+--BOUNDARY42
+Content-Type: text/plain; charset="utf-8"
+
+Dear customer,
+
+We detected unusual activity on your account. Your account will be
+suspended within 24 hours unless you verify your identity immediately.
+
+Verify here: http://paypa1-secure.com/login/verify?session=abc123
+Or use this link: http://192.0.2.44/verify
+
+See the attached invoice for details.
+
+PayPal Security Team
+
+--BOUNDARY42
+Content-Type: text/html; charset="utf-8"
+
+<html><body>
+<p>Dear customer,</p>
+<p>We detected unusual activity on your account. Your account will be
+suspended within 24 hours unless you verify your identity immediately.</p>
+<p><a href="http://paypa1-secure.com/login/verify?session=abc123">https://www.paypal.com/signin</a></p>
+<p><a href="http://bit.ly/3xK7abc">Verify my account</a></p>
+</body></html>
+
+--BOUNDARY42
+Content-Type: application/octet-stream; name="Invoice_2026.pdf.exe"
+Content-Disposition: attachment; filename="Invoice_2026.pdf.exe"
+Content-Transfer-Encoding: base64
+
+VGhpcyBpcyBhIGZha2UgYXR0YWNobWVudCBpbmNsdWRlZCBmb3IgZGVtbyBwdXJwb3NlcyBv
+bmx5Lgo=
+
+--BOUNDARY42--

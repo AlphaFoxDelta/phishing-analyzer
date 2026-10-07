@@ -1,0 +1,36 @@
+From: GitHub <noreply@github.com>
+Return-Path: <bounces@github.com>
+To: dev@example.com
+Subject: [octocat/hello-world] Pull request #42 was merged
+Date: Mon, 5 Oct 2026 16:02:11 -0500
+Message-ID: <pullreq-42-merged@mail.github.com>
+Authentication-Results: mx.example.com; spf=pass smtp.mailfrom=github.com; dkim=pass header.d=github.com; dmarc=pass
+Received: from o11.mail.github.com (o11.mail.github.com [192.0.2.10]) by mx.example.com with ESMTP id def456 for <dev@example.com>; Mon, 05 Oct 2026 16:02:40 -0500
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="BOUNDARY77"
+
+--BOUNDARY77
+Content-Type: text/plain; charset="utf-8"
+
+Hi octocat,
+
+Your pull request #42 "Fix login retry logic" was merged into main in
+octocat/hello-world.
+
+View it here: https://github.com/octocat/hello-world/pull/42
+
+Thanks,
+The GitHub Team
+
+--BOUNDARY77
+Content-Type: text/html; charset="utf-8"
+
+<html><body>
+<p>Hi octocat,</p>
+<p>Your pull request #42 "Fix login retry logic" was merged into main in
+octocat/hello-world.</p>
+<p><a href="https://github.com/octocat/hello-world/pull/42">View pull request #42</a></p>
+<p>Thanks,<br>The GitHub Team</p>
+</body></html>
+
+--BOUNDARY77--
