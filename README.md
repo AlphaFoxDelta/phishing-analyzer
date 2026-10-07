@@ -1,166 +1,163 @@
-# vuln-tracker
+# phishing-analyzer
 
-A command-line tracker for security findings. Scanners are good at finding
-problems. They are not good at telling you which ones got fixed. This is
-the missing middle: log a finding, move it from open to resolved, and
-export a report you can hand to a manager or a client.
-
-Standard library only. Findings are stored in a local findings.json file.
+A CLI tool that reads a suspicious email (.eml), checks it for phishing
+signals, and gives you a score and a verdict. Python standard library only.
+No dependencies.
 
 ## Why I built this
 
-This one comes from the management side of my brain, not the hacking side.
+Phishing is still how most breaches start, and I wanted a blue-team tool
+that deals with the thing people actually click on. My other projects scan
+networks and logs. This one reads the email itself: headers, auth results,
+links, attachments, the works.
 
-A scan gives you a list of problems. That list is worthless without
-ownership and follow-through: who is working on what, what is actually
-fixed, what turned out to be a false positive. On a real team, that
-tracking is the difference between "we ran a scan" and "we are handling
-it." I wanted a tool that treats findings like work items with a
-lifecycle, instead of lines in a text dump nobody reads twice.
+I also wanted to understand email authentication for real. I had read
+about SPF, DKIM, and DMARC in class, but parsing an actual
+Authentication-Results header and seeing a spf=fail next to a message
+claiming to be PayPal made it click in a way the textbook never did.
 
-It also pairs with my web-security-scanner. Run a scan with --json, import
-the results here, and now you have a workflow instead of a pile of output.
+## What it checks
 
-## What it does
+Headers first:
 
-- Add findings with a title, severity (critical, high, medium, low, info),
-  source, and description
-- Track each finding through a lifecycle: open, in-progress, resolved,
-  false-positive
-- List findings with filters by status or severity, worst first
-- Print a summary: counts by severity and by status
-- Export a Markdown report written for a non-technical reader
-- Import findings from a JSON scan report, so scanner output becomes
-  tracked work
-- Seed realistic demo data with one command, so you can try the whole
-  workflow immediately
+- From display name vs. the real address: flags "PayPal Support" sent
+  from an address that is not @paypal.com
+- Reply-To on a different domain than From
+- Return-Path on a different domain than From
+- Received chain: counts the hops, shows where the message entered, and
+  notes if the claimed sender domain never shows up in the chain at all
+- Authentication-Results: parses SPF, DKIM, and DMARC, and scores fails
+  harder than softfails and missing results
+
+Then the body:
+
+- Every URL gets checked: IP-literal hosts, punycode domains, URL
+  shorteners, and lookalike domains (a small brand list plus edit-distance
+  typosquat detection, so paypa1-secure.com gets flagged next to paypal)
+- Link text mismatch: the visible text says paypal.com but the href goes
+  somewhere else
+- Attachments: lists them, flags dangerous extensions (.exe, .scr, .js,
+  and friends), and calls out double extensions like Invoice.pdf.exe
+- Pressure language: urgent, verify your account, suspended, that kind of
+  thing
+
+Each finding adds points. 50 or more is likely phishing, 20 to 49 is
+suspicious, under 20 is likely legitimate. Exit code is 1 on likely
+phishing, 0 otherwise, so you can wire it into a script.
 
 ## Usage
 
 ```bash
-# load 5 realistic demo findings
-python3 tracker.py demo
+# analyze an email
+python3 analyzer.py sample_phish.eml
 
-# see everything, worst first
-python3 tracker.py list
-
-# just the open items
-python3 tracker.py list --status open
-
-# add a finding by hand
-python3 tracker.py add --title "TLS 1.0 still enabled" --severity medium \
-  --source "manual review" --description "Server still negotiates TLS 1.0."
-
-# move things along
-python3 tracker.py update 4 --status in-progress
-python3 tracker.py resolve 1
-
-# where do we stand
-python3 tracker.py summary
-
-# import scanner output (pairs with web-security-scanner --json)
-python3 tracker.py import --file scan.json --source web-security-scanner
-
-# write the report
-python3 tracker.py report
+# machine-readable output
+python3 analyzer.py sample_phish.eml --json
 ```
 
-The summary looks like this:
+Two sample emails are included so you can see both ends of the scale:
+`sample_phish.eml` is a fake PayPal phish I wrote, `sample_legit.eml` is
+a normal GitHub notification.
+
+## What the output looks like
+
+The phishing sample:
 
 ```
-Total findings : 5
-Needs work     : 4 (open: 3, in-progress: 1)
-Closed out     : 1 resolved, 0 false-positive
+Phishing analysis: sample_phish.eml
+==============================================================
+From    : PayPal Support <support@paypa1-secure.com>
+Subject : Urgent: Verify your account now
+Date    : Tue, 06 Oct 2026 09:14:22 -0500
+Score   : 170
+Verdict : LIKELY PHISHING
+==============================================================
 
-By severity:
-  critical  2
-  high      1
-  medium    1
-  low       1
-  info      0
+Findings (16):
+
+[+15] display-name spoof
+      Display name says "PayPal Support" but the address is not @paypal.com (it is support@paypa1-secure.com)
+[+10] reply-to mismatch
+      Reply-To (refunds@paypa1-secure.net) is on a different domain than From (support@paypa1-secure.com)
+[+10] return-path mismatch
+      Return-Path (bounce@mailer01.example-ru.com) is on a different domain than From (support@paypa1-secure.com)
+[+15] SPF fail
+      SPF check came back fail
+[+15] DMARC fail
+      DMARC check came back fail
+[+15] link text mismatch
+      Link text shows www.paypal.com but actually goes to paypa1-secure.com
+[+15] ip-literal url
+      Link uses an IP address instead of a domain: http://192.0.2.44/verify
+[+10] url shortener
+      Link hides its destination behind a shortener: http://bit.ly/3xK7abc
+[+20] lookalike domain
+      Link domain paypa1-secure.com looks like paypal but is not paypal.com
+[+20] dangerous attachment
+      Attachment "Invoice_2026.pdf.exe" has an executable extension (.exe)
+[+10] double extension
+      Attachment "Invoice_2026.pdf.exe" uses a double extension, it looks like a document but runs as code
+[+5] pressure language
+      Urgency/pressure phrases found: "urgent", "immediately", "verify your account", "suspended"
 ```
 
-And the exported report.md reads like something you could actually send
-someone:
+The legitimate sample:
 
-```markdown
-# Vulnerability Findings Report
-Generated: 2026-10-07T22:55:17
+```
+Phishing analysis: sample_legit.eml
+==============================================================
+From    : GitHub <noreply@github.com>
+Subject : [octocat/hello-world] Pull request #42 was merged
+Date    : Mon, 05 Oct 2026 16:02:11 -0500
+Score   : 0
+Verdict : LIKELY LEGITIMATE
+==============================================================
 
-## Summary
+Findings (1):
 
-Total findings tracked: 5
-
-By severity:
-
-- critical: 2
-- high: 1
-- medium: 1
-- low: 1
-- info: 0
-
-By status:
-
-- open: 3
-- in-progress: 1
-- resolved: 1
-- false-positive: 0
-
-## Findings needing attention
-
-### [1] Reflected XSS in site search parameter (critical)
-
-Status: open | Source: web-security-scanner | Found: 2026-10-07T22:55:17
-
-The q parameter on /search reflects input without encoding. Confirmed with
-a benign script payload. Any visitor clicking a crafted link runs attacker
-JavaScript in the site's origin.
-
-### [3] Missing Content-Security-Policy header (high)
-
-Status: open | Source: web-security-scanner | Found: 2026-10-07T22:55:17
-
-No CSP header on any page. This is the main browser-side defense against
-XSS, and without it a single injection runs with full page privileges.
-
-## Resolved
-
-- [5] Server version disclosed in response headers (low)
-
-## False positives
-
-None.
+[+0] received chain
+      1 hops, earliest hop from 192.0.2.10
 ```
 
-## What tripped me up
+## What's in the repo
 
-Status naming. I started with "new," "acknowledged," "mitigated," and
-"accepted risk," which is how a lot of enterprise tools talk. Then I tried
-to actually use it and kept typing the wrong words. Open, in-progress,
-resolved, false-positive: boring, obvious, and I never have to look them
-up. Naming things for the person typing at 2am beats naming them for the
-framework.
+```
+phishing-analyzer/
+├── analyzer.py        # the whole analyzer, one file
+├── sample_phish.eml   # fake PayPal phish I wrote for testing
+├── sample_legit.eml   # normal GitHub notification for contrast
+└── README.md          # you're reading it
+```
 
-The other thing was the import format. My first version expected the exact
-JSON shape of my web scanner, which made it useless for anything else.
-Loosening it to "a list of objects with title, severity, description"
-took ten minutes and made it work with basically any scanner output.
+## Things that tripped me up
 
-## What I'd do differently
+- Python's email library parses headers into structured objects when you
+  use policy.default, which is great until get_content() throws on a part
+  with a weird encoding. I wrapped payload extraction in try/except and
+  moved on. A portfolio tool should not crash on a malformed email.
+- The Received headers are listed newest-first, so the earliest hop (the
+  one that tells you where the message really came from) is the last one
+  in the list. I read them backwards the first time and reported the
+  recipient's own mail server as the origin. Felt dumb once I saw it.
+- HTML link parsing needed the stdlib html.parser, and keeping track of
+  which visible text belongs to which href across nested tags took a
+  couple of tries. Nothing fancy, just careful state handling.
 
-- This is single-user and file-based, which is fine for a portfolio and a
-  small team. The real version of this is multi-user with a database, so
-  two people are not editing the same JSON file.
-- No due dates or owners on findings. For a team workflow, every open
-  finding needs a name and a date next to it. That is the first feature
-  I would add.
-- The report is Markdown only. An HTML or PDF export would be nicer for
-  sending to clients who do not live in a terminal.
-- Severity is hand-assigned on import. Scoring it automatically (CVSS or
-  even a simple rubric) would make the import path more honest.
+## What I'd do differently next time
+
+- Actually resolve DNS: check the sending IP against the domain's SPF
+  record instead of trusting the Authentication-Results header, which the
+  receiving server writes and could be forged in a forwarded sample.
+- Screenshot or render the HTML safely to catch visual tricks like
+  hidden text and zero-width characters.
+- Add VirusTotal or URLhaus lookups for URLs and attachment hashes, with
+  an API key flag. Right now everything is offline by design.
+- A simple web UI where you paste or upload an email and get the report.
+  The CLI is fine for me, but nobody outside security wants to live in a
+  terminal.
 
 ## A note on using this
 
-This tracks findings, it does not find them. Pair it with actual scans of
-systems you own or are authorized to test, and the report becomes the
-paper trail that proves the work got done.
+This analyzes emails you already have. Do not use it to send phishing
+emails to test people without their written consent. That is how you lose
+a job, not how you get one.
