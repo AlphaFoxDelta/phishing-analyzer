@@ -1,108 +1,166 @@
-# network-mapper
+# vuln-tracker
 
-Point it at a subnet and get back a visual map of what's alive: an HTML
-page with a topology diagram, every live host labeled with its IP,
-hostname, and open ports. Standard library only.
+A command-line tracker for security findings. Scanners are good at finding
+problems. They are not good at telling you which ones got fixed. This is
+the missing middle: log a finding, move it from open to resolved, and
+export a report you can hand to a manager or a client.
+
+Standard library only. Findings are stored in a local findings.json file.
 
 ## Why I built this
 
-My other projects all print text. Scanners print tables, detectors print
-reports, and that's fine for me, but the moment you need to show someone
-else what's on a network, a wall of text doesn't cut it. I wanted
-something I could pull up in a meeting and have everyone understand in
-five seconds. A picture of the network beats a spreadsheet of the network.
+This one comes from the management side of my brain, not the hacking side.
 
-It also scratched a curiosity itch. I'd used tools that draw network maps
-but never thought about how the discovery actually works underneath.
-Turns out it's simpler than I expected, and harder in exactly one place
-(more on that below).
+A scan gives you a list of problems. That list is worthless without
+ownership and follow-through: who is working on what, what is actually
+fixed, what turned out to be a false positive. On a real team, that
+tracking is the difference between "we ran a scan" and "we are handling
+it." I wanted a tool that treats findings like work items with a
+lifecycle, instead of lines in a text dump nobody reads twice.
+
+It also pairs with my web-security-scanner. Run a scan with --json, import
+the results here, and now you have a workflow instead of a pile of output.
 
 ## What it does
 
-- Takes a CIDR (192.168.1.0/24), a single IP, or a range (10.0.0.1-20)
-- Phase 1, host discovery: threaded TCP connects against a few common
-  ports per host. A connect or a refused connection both mean the host is
-  alive. Only timeouts mean dead or filtered
-- Phase 2, port scan: every live host gets a quick scan of common ports
-  with service guesses, plus a reverse DNS lookup for a hostname
-- Writes map.html: a self-contained page with an SVG topology diagram
-  (radial layout, scanner in the middle, spokes out to each host),
-  color-coded by how many ports are open, with a results table underneath
-- Prints a text summary too, and --json gives you machine-readable output
+- Add findings with a title, severity (critical, high, medium, low, info),
+  source, and description
+- Track each finding through a lifecycle: open, in-progress, resolved,
+  false-positive
+- List findings with filters by status or severity, worst first
+- Print a summary: counts by severity and by status
+- Export a Markdown report written for a non-technical reader
+- Import findings from a JSON scan report, so scanner output becomes
+  tracked work
+- Seed realistic demo data with one command, so you can try the whole
+  workflow immediately
 
 ## Usage
 
 ```bash
-# map a /24
-python3 mapper.py 192.168.1.0/24
+# load 5 realistic demo findings
+python3 tracker.py demo
 
-# smaller range, custom ports
-python3 mapper.py 10.0.0.1-20 --ports 22,80,443
+# see everything, worst first
+python3 tracker.py list
 
-# JSON output, custom file name
-python3 mapper.py 192.168.1.0/24 --json --output office.html
+# just the open items
+python3 tracker.py list --status open
+
+# add a finding by hand
+python3 tracker.py add --title "TLS 1.0 still enabled" --severity medium \
+  --source "manual review" --description "Server still negotiates TLS 1.0."
+
+# move things along
+python3 tracker.py update 4 --status in-progress
+python3 tracker.py resolve 1
+
+# where do we stand
+python3 tracker.py summary
+
+# import scanner output (pairs with web-security-scanner --json)
+python3 tracker.py import --file scan.json --source web-security-scanner
+
+# write the report
+python3 tracker.py report
 ```
 
-### Options
+The summary looks like this:
 
-| Flag              | Default            | Description                              |
-|-------------------|--------------------|------------------------------------------|
-| `target`          | (required)         | CIDR, single IP, or range like 10.0.0.1-20 |
-| `--ports`         | 20 common ports    | ports to scan on live hosts              |
-| `--discovery-ports` | 80,443,22        | ports used for host discovery            |
-| `--threads`       | `100`              | concurrent workers                       |
-| `--timeout`       | `1.0`              | per-connection timeout in seconds        |
-| `--output`        | `map.html`         | HTML map file to write                   |
-| `--json`          | off                | print machine-readable JSON to stdout    |
+```
+Total findings : 5
+Needs work     : 4 (open: 3, in-progress: 1)
+Closed out     : 1 resolved, 0 false-positive
 
-## What the map looks like
+By severity:
+  critical  2
+  high      1
+  medium    1
+  low       1
+  info      0
+```
 
-The page opens with a summary line (how many hosts scanned, how many
-alive, how long it took), then the diagram: a blue node in the center
-labeled "scanner" with lines radiating out to one node per live host.
-Each host node shows its IP, with the hostname underneath if one
-resolved. The color tells you how exposed a host is at a glance. Gray
-means the host answered but none of the scanned ports were open. Green is
-1-2 ports, amber is 3-5, red is 6 or more. Hovering any node pops up the
-full port list. Under the diagram there's a plain table with every host,
-hostname, and open ports, so you can copy from it.
+And the exported report.md reads like something you could actually send
+someone:
 
-## Requirements
+```markdown
+# Vulnerability Findings Report
+Generated: 2026-10-07T22:55:17
 
-Python 3.8+. Nothing to install.
+## Summary
+
+Total findings tracked: 5
+
+By severity:
+
+- critical: 2
+- high: 1
+- medium: 1
+- low: 1
+- info: 0
+
+By status:
+
+- open: 3
+- in-progress: 1
+- resolved: 1
+- false-positive: 0
+
+## Findings needing attention
+
+### [1] Reflected XSS in site search parameter (critical)
+
+Status: open | Source: web-security-scanner | Found: 2026-10-07T22:55:17
+
+The q parameter on /search reflects input without encoding. Confirmed with
+a benign script payload. Any visitor clicking a crafted link runs attacker
+JavaScript in the site's origin.
+
+### [3] Missing Content-Security-Policy header (high)
+
+Status: open | Source: web-security-scanner | Found: 2026-10-07T22:55:17
+
+No CSP header on any page. This is the main browser-side defense against
+XSS, and without it a single injection runs with full page privileges.
+
+## Resolved
+
+- [5] Server version disclosed in response headers (low)
+
+## False positives
+
+None.
+```
 
 ## What tripped me up
 
-The big one: no raw sockets without root. The textbook way to find live
-hosts is a ping sweep with ICMP, but crafting ICMP packets needs raw
-sockets, which need root. I didn't want a tool that only works with sudo,
-so discovery is TCP-based instead. Try to connect to a few common ports
-on each host. A successful connect means alive, obviously, but a refused
-connection also means alive, because only a live host sends back a RST.
-Timeouts are the only thing that means dead or filtered. That one insight
-is the whole discovery engine.
+Status naming. I started with "new," "acknowledged," "mitigated," and
+"accepted risk," which is how a lot of enterprise tools talk. Then I tried
+to actually use it and kept typing the wrong words. Open, in-progress,
+resolved, false-positive: boring, obvious, and I never have to look them
+up. Naming things for the person typing at 2am beats naming them for the
+framework.
 
-The other thing was reverse DNS. `socket.gethostbyaddr()` is a blocking
-call with no timeout parameter, and on some networks it just hangs for a
-while before giving up. It runs inside the thread pool alongside the port
-scans, so a slow resolver doesn't stall the whole run, but it was the
-long pole on my first test against a bigger subnet. Lesson learned: DNS
-is always the slow part.
+The other thing was the import format. My first version expected the exact
+JSON shape of my web scanner, which made it useless for anything else.
+Loosening it to "a list of objects with title, severity, description"
+took ten minutes and made it work with basically any scanner output.
 
 ## What I'd do differently
 
-- Add OS guessing from TTL and TCP window sizes. Right now the map tells
-  you what's open, not what's running underneath.
-- Let the HTML page refresh itself for continuous monitoring instead of
-  being a one-shot snapshot.
-- Banner grabbing on open ports, like my port scanner does. I left it out
-  to keep this project focused on the mapping part.
-- An option to export the diagram as PNG for slide decks. SVG is great in
-  a browser, less great pasted into PowerPoint.
+- This is single-user and file-based, which is fine for a portfolio and a
+  small team. The real version of this is multi-user with a database, so
+  two people are not editing the same JSON file.
+- No due dates or owners on findings. For a team workflow, every open
+  finding needs a name and a date next to it. That is the first feature
+  I would add.
+- The report is Markdown only. An HTML or PDF export would be nicer for
+  sending to clients who do not live in a terminal.
+- Severity is hand-assigned on import. Scoring it automatically (CVSS or
+  even a simple rubric) would make the import path more honest.
 
 ## A note on using this
 
-Only map networks you own or are explicitly authorized to scan. A
-subnet-wide scan is noisy by design: you're knocking on every door.
-That's fine in your own lab and a real problem on someone else's network.
-Get permission first.
+This tracks findings, it does not find them. Pair it with actual scans of
+systems you own or are authorized to test, and the report becomes the
+paper trail that proves the work got done.
